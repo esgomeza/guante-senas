@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guante traductor de señas</title>
+<style>
+  :root{--bg:#0f172a;--card:#1e293b;--txt:#e2e8f0;--muted:#94a3b8;--acc:#22c55e;--line:#334155}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--txt)}
+  header{padding:10px 14px;background:#020617;position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+  h1{font-size:17px;margin:0}
+  h2{font-size:16px;margin:0 0 10px}
+  main{max-width:900px;margin:0 auto;padding:12px;display:grid;gap:12px}
+  .card{background:var(--card);border-radius:12px;padding:14px}
+  button{background:#2563eb;color:#fff;border:0;border-radius:8px;padding:10px 14px;font-size:15px;cursor:pointer}
+  button.sec{background:#475569}
+  button.ok{background:#16a34a}
+  button.bad{background:#dc2626}
+  button:disabled{opacity:.5}
+  input,select{background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:9px;font-size:15px}
+  label{font-size:14px}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+  .muted{color:var(--muted);font-size:13px}
+  .pill{font-size:12px;padding:4px 9px;border-radius:99px;background:#7f1d1d}
+  .pill.on{background:#166534}
+  #videoBox{position:relative;width:100%;background:#000;border-radius:12px;overflow:hidden;aspect-ratio:4/3}
+  #video,#overlay{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .mirror{transform:scaleX(-1)}
+  #subtitle{position:absolute;left:0;right:0;bottom:0;padding:10px;text-align:center;font-size:34px;font-weight:700;background:rgba(0,0,0,.55);min-height:58px}
+  #prompt{position:absolute;left:0;right:0;top:0;padding:10px;text-align:center;font-size:21px;font-weight:600;background:rgba(37,99,235,.9);display:none}
+  .bar{display:grid;grid-template-columns:72px 1fr 56px;gap:8px;align-items:center;margin:6px 0;font-size:14px}
+  .track{height:18px;background:#0f172a;border-radius:9px;overflow:hidden}
+  .fill{height:100%;width:0;background:var(--acc);transition:width .08s}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  td,th{padding:6px;border-bottom:1px solid var(--line);text-align:left}
+  .good{color:#4ade80}.badtxt{color:#f87171}
+  hr{border:0;border-top:1px solid var(--line);margin:12px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>🧤 Guante traductor de señas</h1>
+  <div class="row" style="margin:0">
+    <span class="pill" id="pGuante">Guante ✗</span>
+    <span class="pill" id="pCam">Cámara ✗</span>
+  </div>
+</header>
+
+<main>
+  <!-- VIDEO Y RECONOCIMIENTO -->
+  <section class="card">
+    <div id="videoBox">
+      <video id="video" playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <div id="prompt"></div>
+      <div id="subtitle"></div>
+    </div>
+    <div class="row">
+      <button id="btnCam">📷 Activar cámara</button>
+      <button id="btnFlip" class="sec">🔄 Cambiar cámara</button>
+      <button id="btnRec" class="ok">▶ Iniciar reconocimiento</button>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="chkVoz" checked> Voz</label>
+      <button id="btnProbarVoz" class="sec">🔊 Probar voz</button>
+      <label>Usar:
+        <select id="usar">
+          <option value="ambos">Guante + cámara</option>
+          <option value="guante">Solo guante</option>
+          <option value="camara">Solo cámara</option>
+        </select>
+      </label>
+    </div>
+    <div class="muted" id="conf">Reconocimiento detenido</div>
+  </section>
+
+  <!-- 1. CONEXIÓN DEL GUANTE -->
+  <section class="card">
+    <h2>1. Conectar el guante</h2>
+    <div class="row">
+      <input id="sala" placeholder="Código de sala (ej. 4821)" inputmode="numeric" style="width:190px">
+    </div>
+    <div class="row">
+      <button id="btnRecibir">📱 Recibir del computador</button>
+      <span class="muted">← en el celular</span>
+    </div>
+    <div class="row">
+      <button id="btnUsb" class="sec">🔌 Conectar por USB</button>
+      <label><input type="checkbox" id="chkCompartir"> Enviar al celular</label>
+      <span class="muted">← en el computador</span>
+    </div>
+    <div id="bars"></div>
+    <div class="muted" id="rawTxt">Sin datos del guante</div>
+    <div class="row">
+      <button class="sec" id="btnLedV">💚 Probar LED verde</button>
+      <button class="sec" id="btnLedR">❤️ Probar LED rojo</button>
+    </div>
+  </section>
+
+  <!-- 2. CALIBRACIÓN -->
+  <section class="card">
+    <h2>2. Calibrar el guante</h2>
+    <div class="row"><button id="btnCal">🎯 Calibrar (mano abierta y puño)</button></div>
+    <div class="muted" id="calTxt">Sin calibrar</div>
+  </section>
+
+  <!-- 3. GRABAR SEÑAS -->
+  <section class="card">
+    <h2>3. Grabar señas</h2>
+    <div class="row">
+      <input id="nombreSena" placeholder="Nombre de la seña (ej. Hola)" style="flex:1;min-width:180px">
+      <button id="btnGrabar" class="bad">⏺ Grabar 30 muestras</button>
+    </div>
+    <div class="muted">Graba también una seña llamada <b>reposo</b> (mano relajada): se reconoce pero no se dice en voz alta.</div>
+    <table id="tablaSenas"></table>
+    <div class="row">
+      <button class="sec" id="btnExport">💾 Exportar</button>
+      <button class="sec" id="btnImport">📂 Importar</button>
+      <input type="file" id="fileImport" accept=".json" hidden>
+      <button class="bad" id="btnBorrarTodo">🗑 Borrar todo</button>
+    </div>
+  </section>
+
+  <!-- 4. EVALUAR -->
+  <section class="card">
+    <h2>4. Medir la precisión</h2>
+    <div class="row"><button id="btnEval">📊 Evaluar clasificador (k-NN)</button></div>
+    <div id="evalOut" class="muted">Graba al menos 2 señas para evaluar.</div>
+  </section>
+</main>
+
+<!-- Librería MQTT (para enviar los datos del computador al celular) -->
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+
+<script type="module">
+import { HandLandmarker, FilesetResolver, DrawingUtils } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+// ================== CONFIGURACIÓN ==================
+const BROKER = "wss://broker.hivemq.com:8884/mqtt";   // alternativa: "wss://broker.emqx.io:8084/mqtt"
+const DEDOS = ["Pulgar", "Índice", "Medio", "Anular", "Meñique"];
+const K = 5;               // vecinos del k-NN
+const CONF_MIN = 0.6;      // 3 de 5 vecinos deben coincidir
+const ESTABLE = 6;         // lecturas iguales seguidas para aceptar una seña (≈0.6 s)
+const MUESTRAS = 30;       // muestras por seña
+
+// ================== ESTADO ==================
+const $ = id => document.getElementById(id);
+const leer = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch { return def; } };
+const st = {
+  raw: null, btn: 0, lastData: 0,
+  cal: leer("cal", null),
+  samples: leer("samples", []),
+  hand: null,
+  recognizing: false, hist: [], stable: null, led: ""
+};
+$("sala").value = localStorage.getItem("sala") || "";
+
+// ================== BARRAS DE LOS DEDOS ==================
+DEDOS.forEach((d, i) => $("bars").insertAdjacentHTML("beforeend",
+  `<div class="bar"><span>${d}</span><div class="track"><div class="fill" id="f${i}"></div></div><span id="v${i}">–</span></div>`));
+
+function guanteOk() { return st.raw && performance.now() - st.lastData < 1500; }
+
+function porcentajes() {
+  if (!st.raw || !st.cal) return null;
+  return st.raw.map((v, i) => {
+    const r = st.cal.recto[i], d = st.cal.doblado[i], rango = d - r;
+    if (Math.abs(rango) < 3) return 0;               // dedo sin sensor o sin movimiento
+    return Math.min(100, Math.max(0, (v - r) / rango * 100));
+  });
+}
+
+// Llega una lectura del guante (por USB o por internet)
+function alRecibirGuante(vals, btn) {
+  st.raw = st.raw ? st.raw.map((o, i) => o * 0.6 + vals[i] * 0.4) : vals.slice();
+  if (btn && !st.btn) alPresionarBoton();
+  if (compartiendo) publicarDatos(vals, btn, btn !== st.btn);
+  st.btn = btn;
+  st.lastData = performance.now();
+}
+
+// El pulsador del guante repite en voz alta la última seña
+function alPresionarBoton() {
+  if (st.stable && st.stable !== "?" && !esReposo(st.stable)) hablar(st.stable);
+}
+
+// ================== CONEXIÓN USB (Web Serial, en el computador) ==================
+let port = null, writer = null;
+async function conectarUSB() {
+  if (!("serial" in navigator)) {
+    alert("Este navegador no permite USB.\nEn el computador usa Chrome o Edge.\nEn el celular usa el botón \"Recibir del computador\".");
+    return;
+  }
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+    writer = port.writable.getWriter();
+    $("btnUsb").textContent = "🔌 USB conectado";
+    $("btnUsb").className = "ok";
+    leerSerial();
+  } catch (e) { alert("No se pudo conectar: " + e.message); }
+}
+async function leerSerial() {
+  const dec = new TextDecoderStream();
+  port.readable.pipeTo(dec.writable).catch(() => {});
+  const reader = dec.readable.getReader();
+  let buf = "";
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += value;
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        const linea = buf.slice(0, i).trim();
+        buf = buf.slice(i + 1);
+        const p = linea.split(",").map(Number);
+        if (p.length === 6 && p.every(n => !isNaN(n))) alRecibirGuante(p.slice(0, 5), p[5]);
+      }
+    }
+  } catch (e) { console.warn(e); }
+  $("btnUsb").textContent = "🔌 Conectar por USB";
+  $("btnUsb").className = "sec";
+  writer = null;
+}
+
+// ================== PUENTE POR INTERNET (MQTT) ==================
+let mq = null, sala = "", compartiendo = false, recibiendo = false, ultimoEnvio = 0;
+const tema = t => `guante-ufps/${sala}/${t}`;
+
+function leerSala() {
+  sala = $("sala").value.trim().replace(/[^a-zA-Z0-9]/g, "");
+  if (!sala) { alert("Escribe un código de sala (el mismo en el computador y en el celular)."); return false; }
+  localStorage.setItem("sala", sala);
+  return true;
+}
+function conectarMQTT(alConectar) {
+  if (typeof mqtt === "undefined") { alert("No cargó la librería MQTT. Revisa la conexión a internet."); return; }
+  if (mq) mq.end(true);
+  mq = mqtt.connect(BROKER, { clientId: "g" + Math.random().toString(16).slice(2, 10), reconnectPeriod: 2000 });
+  mq.on("connect", alConectar);
+  mq.on("error", e => console.warn("MQTT", e));
+  mq.on("message", (t, msg) => {
+    const s = msg.toString();
+    if (recibiendo && t.endsWith("/datos")) {
+      try { const d = JSON.parse(s); alRecibirGuante(d.g, d.b); } catch {}
+    }
+    if (compartiendo && t.endsWith("/led") && writer) {
+      writer.write(new TextEncoder().encode(s)).catch(() => {});
+    }
+  });
+}
+function publicarDatos(vals, btn, cambioBoton) {
+  const ahora = performance.now();
+  if (!mq || !mq.connected) return;
+  if (!cambioBoton && ahora - ultimoEnvio < 66) return;   // ≈15 envíos por segundo
+  ultimoEnvio = ahora;
+  mq.publish(tema("datos"), JSON.stringify({ g: vals.map(v => Math.round(v * 10) / 10), b: btn }));
+}
+
+$("btnRecibir").onclick = () => {
+  if (!leerSala()) return;
+  recibiendo = true; compartiendo = false; $("chkCompartir").checked = false;
+  $("btnRecibir").textContent = "📱 Conectando…";
+  conectarMQTT(() => {
+    mq.subscribe(tema("datos"));
+    $("btnRecibir").textContent = "📱 Recibiendo (sala " + sala + ")";
+    $("btnRecibir").className = "ok";
+  });
+};
+$("chkCompartir").onchange = e => {
+  if (e.target.checked) {
+    if (!writer) { alert("Primero conecta el guante por USB."); e.target.checked = false; return; }
+    if (!leerSala()) { e.target.checked = false; return; }
+    compartiendo = true; recibiendo = false;
+    conectarMQTT(() => mq.subscribe(tema("led")));
+  } else {
+    compartiendo = false;
+    if (mq) mq.end(true);
+  }
+};
+
+// LED del Arduino: 'V' verde, 'R' rojo
+function enviarLed(c, forzar = false) {
+  if (st.led === c && !forzar) return;
+  st.led = c;
+  if (writer) writer.write(new TextEncoder().encode(c)).catch(() => {});
+  else if (recibiendo && mq && mq.connected) mq.publish(tema("led"), c);
+}
+$("btnLedV").onclick = () => enviarLed("V", true);
+$("btnLedR").onclick = () => enviarLed("R", true);
+
+// ================== CÁMARA + MEDIAPIPE ==================
+let handLm = null, drawer = null, stream = null, facing = "user", camOn = false, lastVT = -1;
+
+async function cargarModelo() {
+  const files = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+  const opts = d => ({
+    baseOptions: {
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+      delegate: d
+    },
+    runningMode: "VIDEO", numHands: 1
+  });
+  try { handLm = await HandLandmarker.createFromOptions(files, opts("GPU")); }
+  catch { handLm = await HandLandmarker.createFromOptions(files, opts("CPU")); }
+}
+
+async function activarCamara() {
+  $("btnCam").disabled = true;
+  try {
+    if (!handLm) { mostrarPrompt("Cargando modelo de la mano…"); await cargarModelo(); }
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: facing, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false
+    });
+    const v = $("video");
+    v.srcObject = stream;
+    await v.play();
+    const espejo = facing === "user";
+    v.classList.toggle("mirror", espejo);
+    $("overlay").classList.toggle("mirror", espejo);
+    camOn = true;
+    $("btnCam").textContent = "📷 Cámara activa";
+  } catch (e) { alert("No se pudo abrir la cámara: " + e.message); }
+  ocultarPrompt();
+  $("btnCam").disabled = false;
+}
+
+function detectarMano() {
+  const v = $("video");
+  if (!camOn || !handLm || v.readyState < 2 || v.currentTime === lastVT) return;
+  lastVT = v.currentTime;
+  const res = handLm.detectForVideo(v, performance.now());
+  const c = $("overlay");
+  if (c.width !== v.videoWidth || c.height !== v.videoHeight) {
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    drawer = new DrawingUtils(c.getContext("2d"));
+  }
+  c.getContext("2d").clearRect(0, 0, c.width, c.height);
+  if (res.landmarks && res.landmarks.length) {
+    const lm = res.landmarks[0];
+    drawer.drawConnectors(lm, HandLandmarker.HAND_CONNECTIONS, { color: "#22c55e", lineWidth: 4 });
+    drawer.drawLandmarks(lm, { color: "#f59e0b", lineWidth: 1, radius: 4 });
+    st.hand = normalizarMano(lm);
+  } else st.hand = null;
+}
+
+// 21 puntos → 42 números, relativos a la muñeca y a escala del tamaño de la mano
+function normalizarMano(lm) {
+  const w = lm[0], m = lm[9];
+  const esc = Math.hypot(m.x - w.x, m.y - w.y) || 1;
+  const out = [];
+  for (const p of lm) out.push((p.x - w.x) / esc, (p.y - w.y) / esc);
+  return out;
+}
+
+$("btnCam").onclick = activarCamara;
+$("btnFlip").onclick = () => { facing = facing === "user" ? "environment" : "user"; if (camOn) activarCamara(); };
+
+// ================== CARACTERÍSTICAS Y CLASIFICADOR k-NN ==================
+const r3 = x => Math.round(x * 1000) / 1000;
+function caracteristicas() {
+  const p = porcentajes();
+  return { g: p && guanteOk() ? p.map(x => r3(x / 100)) : null, c: st.hand ? st.hand.map(r3) : null };
+}
+
+function distancia(a, b, usar) {
+  let total = 0, partes = 0;
+  if (usar !== "camara") {
+    if (!a.g || !b.g) return Infinity;
+    let s = 0; for (let i = 0; i < 5; i++) s += (a.g[i] - b.g[i]) ** 2;
+    total += s / 5; partes++;
+  }
+  if (usar !== "guante") {
+    if (a.c && b.c) {
+      let s = 0; for (let i = 0; i < 42; i++) s += (a.c[i] - b.c[i]) ** 2;
+      total += s / 42; partes++;
+    } else if (usar === "camara") return Infinity;
+  }
+  return partes ? total / partes : Infinity;
+}
+
+function clasificar(x, usar, excluir = -1) {
+  const ds = [];
+  st.samples.forEach((s, i) => {
+    if (i === excluir) return;
+    const d = distancia(x, s, usar);
+    if (isFinite(d)) ds.push([d, s.label]);
+  });
+  if (!ds.length) return null;
+  ds.sort((a, b) => a[0] - b[0]);
+  const k = Math.min(K, ds.length), votos = {};
+  for (let i = 0; i < k; i++) votos[ds[i][1]] = (votos[ds[i][1]] || 0) + 1;
+  let mejor = null, n = 0;
+  for (const l in votos) if (votos[l] > n) { n = votos[l]; mejor = l; }
+  return { label: mejor, conf: n / k };
+}
+
+const esReposo = l => l.trim().toLowerCase() === "reposo";
+
+// ================== RECONOCIMIENTO EN VIVO ==================
+function reconocer() {
+  const r = clasificar(caracteristicas(), $("usar").value);
+  const lab = r && r.conf >= CONF_MIN ? r.label : "?";
+  $("conf").textContent = r ? `Más parecida: ${r.label} (${Math.round(r.conf * 100)} % de los vecinos)` : "Faltan datos (¿guante o mano visibles?)";
+  st.hist.push(lab);
+  if (st.hist.length > ESTABLE) st.hist.shift();
+  if (st.hist.length === ESTABLE && st.hist.every(h => h === lab) && lab !== st.stable) {
+    st.stable = lab;
+    if (lab === "?") { $("subtitle").textContent = "…"; enviarLed("R"); }
+    else if (esReposo(lab)) { $("subtitle").textContent = ""; enviarLed("V"); }
+    else { $("subtitle").textContent = lab; hablar(lab); enviarLed("V"); }
+  }
+}
+
+let wakeLock = null;
+$("btnRec").onclick = async () => {
+  st.recognizing = !st.recognizing;
+  st.hist = []; st.stable = null;
+  if (st.recognizing) {
+    if (!st.samples.length) { alert("Primero graba señas (paso 3)."); st.recognizing = false; return; }
+    $("btnRec").textContent = "⏹ Detener reconocimiento"; $("btnRec").className = "bad";
+    hablar("Reconocimiento activado", true);   // también desbloquea la voz en celulares
+    try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {}
+  } else {
+    $("btnRec").textContent = "▶ Iniciar reconocimiento"; $("btnRec").className = "ok";
+    $("subtitle").textContent = ""; $("conf").textContent = "Reconocimiento detenido";
+    try { wakeLock?.release(); } catch {}
+  }
+};
+
+// ================== VOZ ==================
+function hablar(texto, siempre = false) {
+  if ((!$("chkVoz").checked && !siempre) || !("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(texto);
+  const voces = speechSynthesis.getVoices();
+  const v = voces.find(v => v.lang.startsWith("es-CO")) || voces.find(v => v.lang.startsWith("es-US"))
+         || voces.find(v => v.lang.startsWith("es"));
+  u.lang = v ? v.lang : "es-ES";
+  if (v) u.voice = v;
+  speechSynthesis.speak(u);
+}
+speechSynthesis?.getVoices();
+$("btnProbarVoz").onclick = () => hablar("Hola, soy el guante traductor", true);
+
+// ================== MENSAJES SOBRE EL VIDEO ==================
+const esperar = ms => new Promise(r => setTimeout(r, ms));
+function mostrarPrompt(t) { $("prompt").textContent = t; $("prompt").style.display = "block"; }
+function ocultarPrompt() { $("prompt").style.display = "none"; }
+async function cuentaRegresiva(t, s) { for (let i = s; i > 0; i--) { mostrarPrompt(`${t} · ${i}`); await esperar(1000); } }
+
+// ================== CALIBRACIÓN ==================
+async function promedioDurante(texto, ms) {
+  await cuentaRegresiva("Prepárate: " + texto, 3);
+  mostrarPrompt(texto + " · midiendo…");
+  const suma = [0, 0, 0, 0, 0]; let n = 0; const t0 = performance.now();
+  while (performance.now() - t0 < ms) {
+    if (guanteOk()) { st.raw.forEach((v, i) => suma[i] += v); n++; }
+    await esperar(50);
+  }
+  return suma.map(s => s / Math.max(n, 1));
+}
+$("btnCal").onclick = async () => {
+  if (!guanteOk()) { alert("Primero conecta el guante (paso 1)."); return; }
+  $("btnCal").disabled = true;
+  const recto = await promedioDurante("MANO ABIERTA y quieta", 3000);
+  const doblado = await promedioDurante("PUÑO CERRADO y quieto", 3000);
+  ocultarPrompt();
+  st.cal = { recto, doblado };
+  localStorage.setItem("cal", JSON.stringify(st.cal));
+  mostrarCal();
+  $("btnCal").disabled = false;
+};
+function mostrarCal() {
+  if (!st.cal) { $("calTxt").textContent = "Sin calibrar"; return; }
+  $("calTxt").innerHTML = DEDOS.map((d, i) => {
+    const r = st.cal.recto[i], b = st.cal.doblado[i], rango = Math.abs(b - r);
+    const nota = rango < 3 ? " <span class='badtxt'>(sin sensor)</span>" : rango < 15 ? " <span class='badtxt'>(poco rango)</span>" : " <span class='good'>✓</span>";
+    return `${d}: ${r.toFixed(0)} → ${b.toFixed(0)} (cambio ${rango.toFixed(0)})${nota}`;
+  }).join("<br>");
+}
+
+// ================== GRABAR SEÑAS ==================
+function guardarMuestras() { localStorage.setItem("samples", JSON.stringify(st.samples)); mostrarTabla(); }
+
+$("btnGrabar").onclick = async () => {
+  const nombre = $("nombreSena").value.trim();
+  const usar = $("usar").value;
+  if (!nombre) { alert("Escribe el nombre de la seña."); return; }
+  if (usar !== "camara" && (!guanteOk() || !st.cal)) { alert("Conecta y calibra el guante primero (o elige \"Solo cámara\")."); return; }
+  if (usar !== "guante" && !camOn) { alert("Activa la cámara primero (o elige \"Solo guante\")."); return; }
+  $("btnGrabar").disabled = true;
+  await cuentaRegresiva(`Haz la seña "${nombre}"`, 3);
+  let n = 0, intentos = 0;
+  while (n < MUESTRAS && intentos < 300) {
+    intentos++;
+    const x = caracteristicas();
+    const falta = (usar !== "camara" && !x.g) || (usar !== "guante" && !x.c);
+    mostrarPrompt(falta ? "⚠ No veo la mano / el guante…" : `Grabando "${nombre}" ${n + 1}/${MUESTRAS} (mueve un poco la mano)`);
+    if (!falta) { st.samples.push({ label: nombre, g: x.g, c: x.c }); n++; }
+    await esperar(100);
+  }
+  ocultarPrompt();
+  guardarMuestras();
+  $("btnGrabar").disabled = false;
+  if (n < MUESTRAS) alert(`Solo se grabaron ${n} muestras. Revisa que se vea la mano y que el guante esté conectado.`);
+};
+
+function mostrarTabla() {
+  const cuenta = {};
+  st.samples.forEach(s => cuenta[s.label] = (cuenta[s.label] || 0) + 1);
+  const filas = Object.entries(cuenta).map(([l, n]) =>
+    `<tr><td>${l}</td><td>${n} muestras</td><td><button class="sec" data-borrar="${encodeURIComponent(l)}">Borrar</button></td></tr>`).join("");
+  $("tablaSenas").innerHTML = filas ? `<tr><th>Seña</th><th>Datos</th><th></th></tr>${filas}` : "<tr><td class='muted'>Aún no hay señas grabadas</td></tr>";
+}
+$("tablaSenas").onclick = e => {
+  const l = e.target.dataset.borrar;
+  if (!l) return;
+  const nombre = decodeURIComponent(l);
+  if (!confirm(`¿Borrar todas las muestras de "${nombre}"?`)) return;
+  st.samples = st.samples.filter(s => s.label !== nombre);
+  guardarMuestras();
+};
+$("btnBorrarTodo").onclick = () => {
+  if (!confirm("¿Borrar TODAS las señas grabadas?")) return;
+  st.samples = []; guardarMuestras();
+};
+$("btnExport").onclick = () => {
+  const blob = new Blob([JSON.stringify({ cal: st.cal, samples: st.samples })], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "senas-guante.json";
+  a.click();
+};
+$("btnImport").onclick = () => $("fileImport").click();
+$("fileImport").onchange = async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    if (Array.isArray(d.samples)) st.samples = d.samples;
+    if (d.cal) { st.cal = d.cal; localStorage.setItem("cal", JSON.stringify(st.cal)); mostrarCal(); }
+    guardarMuestras();
+    alert("Datos importados.");
+  } catch { alert("El archivo no es válido."); }
+  e.target.value = "";
+};
+
+// ================== EVALUAR (dejar uno fuera) ==================
+$("btnEval").onclick = () => {
+  const usar = $("usar").value, res = {};
+  st.samples.forEach((s, i) => {
+    const r = clasificar(s, usar, i);
+    res[s.label] = res[s.label] || { ok: 0, n: 0 };
+    res[s.label].n++;
+    if (r && r.label === s.label) res[s.label].ok++;
+  });
+  const ls = Object.keys(res);
+  if (ls.length < 2) { $("evalOut").textContent = "Graba al menos 2 señas para evaluar."; return; }
+  let okT = 0, nT = 0;
+  const filas = ls.map(l => {
+    okT += res[l].ok; nT += res[l].n;
+    const p = res[l].ok / res[l].n * 100;
+    return `<tr><td>${l}</td><td class="${p >= 85 ? "good" : "badtxt"}">${p.toFixed(0)} %</td></tr>`;
+  }).join("");
+  const pt = okT / nT * 100;
+  $("evalOut").innerHTML = `<table><tr><th>Seña</th><th>Aciertos</th></tr>${filas}
+    <tr><th>TOTAL</th><th class="${pt >= 85 ? "good" : "badtxt"}">${pt.toFixed(0)} %</th></tr></table>
+    <p>Meta: más de 85 %. Si una seña sale baja, bórrala y grábala de nuevo, o revisa con cuál se confunde.</p>`;
+};
+
+// ================== BUCLE PRINCIPAL ==================
+function pill(id, on, txt) { const e = $(id); e.textContent = txt; e.classList.toggle("on", on); }
+function actualizarUI() {
+  const ok = guanteOk();
+  pill("pGuante", ok, ok ? "Guante ✓" : "Guante ✗");
+  pill("pCam", !!st.hand, st.hand ? "Mano ✓" : camOn ? "Mano ✗" : "Cámara ✗");
+  const p = porcentajes();
+  for (let i = 0; i < 5; i++) {
+    let w = 0, txt = "–";
+    if (ok) {
+      if (p) { w = p[i]; txt = Math.round(p[i]) + " %"; }
+      else { w = st.raw[i] / 1023 * 100; txt = Math.round(st.raw[i]); }
+    }
+    $("f" + i).style.width = w + "%";
+    $("v" + i).textContent = txt;
+  }
+  $("rawTxt").textContent = ok
+    ? `Crudo: ${st.raw.map(v => v.toFixed(0)).join(", ")} · Botón: ${st.btn ? "presionado" : "suelto"}`
+    : "Sin datos del guante";
+}
+let ultimoRec = 0;
+function bucle(t) {
+  try { detectarMano(); } catch (e) { console.warn(e); }
+  actualizarUI();
+  if (st.recognizing && t - ultimoRec > 100) { ultimoRec = t; reconocer(); }
+  requestAnimationFrame(bucle);
+}
+$("btnUsb").onclick = conectarUSB;
+mostrarCal();
+mostrarTabla();
+requestAnimationFrame(bucle);
+</script>
+</body>
+</html>
