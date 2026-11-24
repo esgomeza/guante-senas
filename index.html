@@ -165,12 +165,15 @@ function guanteOk() { return st.raw && performance.now() - st.lastData < 1500; }
 function porcentajes() {
   if (!st.raw || !st.cal) return null;
   return st.raw.map((v, i) => {
-    const r = st.cal.recto[i], d = st.cal.doblado[i], rango = d - r;
-    if (Math.abs(rango) < 3) return 0;               // dedo sin sensor o sin movimiento
-    return Math.min(100, Math.max(0, (v - r) / rango * 100));
+    // En este guante el número BAJA al doblar el dedo:
+    // el valor más alto de la calibración es "recto" (0 %) y el más bajo "doblado" (100 %)
+    const alto = Math.max(st.cal.recto[i], st.cal.doblado[i]);
+    const bajo = Math.min(st.cal.recto[i], st.cal.doblado[i]);
+    const rango = alto - bajo;
+    if (rango < 3) return 0;                          // dedo sin sensor o sin movimiento
+    return Math.min(100, Math.max(0, (alto - v) / rango * 100));
   });
 }
-
 // Llega una lectura del guante (por USB o por internet)
 function alRecibirGuante(vals, btn) {
   st.raw = st.raw ? st.raw.map((o, i) => o * 0.6 + vals[i] * 0.4) : vals.slice();
