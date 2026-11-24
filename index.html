@@ -18,10 +18,10 @@
   button.ok{background:#16a34a}
   button.bad{background:#dc2626}
   button:disabled{opacity:.5}
-  input,select{background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:9px;font-size:15px}
-  label{font-size:14px}
+  input,select{background:#0f172a;color:var(--txt);border:1px solid var(--line);bo
   .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
-  .muted{color:var(--muted);font-size:13px}
+  .muted{color:var(--muted);font-size:13px}rder-radius:8px;padding:9px;font-size:15px}
+  label{font-size:14px}
   .pill{font-size:12px;padding:4px 9px;border-radius:99px;background:#7f1d1d}
   .pill.on{background:#166534}
   #videoBox{position:relative;width:100%;background:#000;border-radius:12px;overflow:hidden;aspect-ratio:4/3}
@@ -167,7 +167,8 @@ function porcentajes() {
   return st.raw.map((v, i) => {
     const r = st.cal.recto[i], d = st.cal.doblado[i], rango = d - r;
     if (Math.abs(rango) < 3) return 0;               // dedo sin sensor o sin movimiento
-    return Math.min(100, Math.max(0, (v - r) / rango * 100));
+  const p = Math.min(100, Math.max(0, (v - r) / rango * 100));
+return i === 4 ? 100 - p : p;   // meñique invertido
   });
 }
 
