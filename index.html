@@ -167,8 +167,7 @@ function porcentajes() {
   return st.raw.map((v, i) => {
     const r = st.cal.recto[i], d = st.cal.doblado[i], rango = d - r;
     if (Math.abs(rango) < 3) return 0;               // dedo sin sensor o sin movimiento
-  const p = Math.min(100, Math.max(0, (v - r) / rango * 100));
-return i === 4 ? 100 - p : p;   // meñique invertido
+    return Math.min(100, Math.max(0, (v - r) / rango * 100));
   });
 }
 
