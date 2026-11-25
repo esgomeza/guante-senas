@@ -18,10 +18,10 @@
   button.ok{background:#16a34a}
   button.bad{background:#dc2626}
   button:disabled{opacity:.5}
-  input,select{background:#0f172a;color:var(--txt);border:1px solid var(--line);bo
-  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
-  .muted{color:var(--muted);font-size:13px}rder-radius:8px;padding:9px;font-size:15px}
+  input,select{background:#0f172a;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:9px;font-size:15px}
   label{font-size:14px}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+  .muted{color:var(--muted);font-size:13px}
   .pill{font-size:12px;padding:4px 9px;border-radius:99px;background:#7f1d1d}
   .pill.on{background:#166534}
   #videoBox{position:relative;width:100%;background:#000;border-radius:12px;overflow:hidden;aspect-ratio:4/3}
@@ -29,9 +29,7 @@
   .mirror{transform:scaleX(-1)}
   #subtitle{position:absolute;left:0;right:0;bottom:0;padding:10px;text-align:center;font-size:34px;font-weight:700;background:rgba(0,0,0,.55);min-height:58px}
   #prompt{position:absolute;left:0;right:0;top:0;padding:10px;text-align:center;font-size:21px;font-weight:600;background:rgba(37,99,235,.9);display:none}
-  .bar{display:grid;grid-template-columns:72px 1fr 56px;gap:8px;align-items:center;margin:6px 0;font-size:14px}
-  .track{height:18px;background:#0f172a;border-radius:9px;overflow:hidden}
-  .fill{height:100%;width:0;background:var(--acc);transition:width .08s}
+  #rawTxt{font-size:15px;color:var(--txt);margin:10px 0}
   table{width:100%;border-collapse:collapse;font-size:14px}
   td,th{padding:6px;border-bottom:1px solid var(--line);text-align:left}
   .good{color:#4ade80}.badtxt{color:#f87171}
@@ -90,8 +88,7 @@
       <label><input type="checkbox" id="chkCompartir"> Enviar al celular</label>
       <span class="muted">← en el computador</span>
     </div>
-    <div id="bars"></div>
-    <div class="muted" id="rawTxt">Sin datos del guante</div>
+    <div id="rawTxt">Sin datos del guante</div>
     <div class="row">
       <button class="sec" id="btnLedV">💚 Probar LED verde</button>
       <button class="sec" id="btnLedR">❤️ Probar LED rojo</button>
@@ -156,17 +153,14 @@ const st = {
 };
 $("sala").value = localStorage.getItem("sala") || "";
 
-// ================== BARRAS DE LOS DEDOS ==================
-DEDOS.forEach((d, i) => $("bars").insertAdjacentHTML("beforeend",
-  `<div class="bar"><span>${d}</span><div class="track"><div class="fill" id="f${i}"></div></div><span id="v${i}">–</span></div>`));
-
 function guanteOk() { return st.raw && performance.now() - st.lastData < 1500; }
 
+// Porcentaje de cada dedo (0 % recto, 100 % doblado). Lo usa el reconocimiento de señas.
+// En este guante el número BAJA al doblar el dedo, así que el valor más alto de la
+// calibración es "recto" y el más bajo "doblado", sin importar el orden en que se guardó.
 function porcentajes() {
   if (!st.raw || !st.cal) return null;
   return st.raw.map((v, i) => {
-    // En este guante el número BAJA al doblar el dedo:
-    // el valor más alto de la calibración es "recto" (0 %) y el más bajo "doblado" (100 %)
     const alto = Math.max(st.cal.recto[i], st.cal.doblado[i]);
     const bajo = Math.min(st.cal.recto[i], st.cal.doblado[i]);
     const rango = alto - bajo;
@@ -174,6 +168,7 @@ function porcentajes() {
     return Math.min(100, Math.max(0, (alto - v) / rango * 100));
   });
 }
+
 // Llega una lectura del guante (por USB o por internet)
 function alRecibirGuante(vals, btn) {
   st.raw = st.raw ? st.raw.map((o, i) => o * 0.6 + vals[i] * 0.4) : vals.slice();
@@ -325,10 +320,24 @@ async function activarCamara() {
     v.classList.toggle("mirror", espejo);
     $("overlay").classList.toggle("mirror", espejo);
     camOn = true;
-    $("btnCam").textContent = "📷 Cámara activa";
+    $("btnCam").textContent = "⏹ Apagar cámara";
+    $("btnCam").className = "bad";
   } catch (e) { alert("No se pudo abrir la cámara: " + e.message); }
   ocultarPrompt();
   $("btnCam").disabled = false;
+}
+
+function apagarCamara() {
+  if (stream) stream.getTracks().forEach(t => t.stop());   // apaga la cámara
+  stream = null;
+  camOn = false;
+  st.hand = null;
+  lastVT = -1;
+  $("video").srcObject = null;                              // deja el cuadro en negro
+  const c = $("overlay");
+  c.getContext("2d").clearRect(0, 0, c.width, c.height);   // borra el dibujo de la mano
+  $("btnCam").textContent = "📷 Activar cámara";
+  $("btnCam").className = "";
 }
 
 function detectarMano() {
@@ -359,7 +368,8 @@ function normalizarMano(lm) {
   return out;
 }
 
-$("btnCam").onclick = activarCamara;
+// El mismo botón prende y apaga la cámara
+$("btnCam").onclick = () => camOn ? apagarCamara() : activarCamara();
 $("btnFlip").onclick = () => { facing = facing === "user" ? "environment" : "user"; if (camOn) activarCamara(); };
 
 // ================== CARACTERÍSTICAS Y CLASIFICADOR k-NN ==================
@@ -581,16 +591,6 @@ function actualizarUI() {
   const ok = guanteOk();
   pill("pGuante", ok, ok ? "Guante ✓" : "Guante ✗");
   pill("pCam", !!st.hand, st.hand ? "Mano ✓" : camOn ? "Mano ✗" : "Cámara ✗");
-  const p = porcentajes();
-  for (let i = 0; i < 5; i++) {
-    let w = 0, txt = "–";
-    if (ok) {
-      if (p) { w = p[i]; txt = Math.round(p[i]) + " %"; }
-      else { w = st.raw[i] / 1023 * 100; txt = Math.round(st.raw[i]); }
-    }
-    $("f" + i).style.width = w + "%";
-    $("v" + i).textContent = txt;
-  }
   $("rawTxt").textContent = ok
     ? `Crudo: ${st.raw.map(v => v.toFixed(0)).join(", ")} · Botón: ${st.btn ? "presionado" : "suelto"}`
     : "Sin datos del guante";
